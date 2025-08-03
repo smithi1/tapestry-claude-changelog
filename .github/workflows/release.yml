@@ -53,15 +53,19 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
+        cat > release-notes.md << 'EOF'
+        ## Claude Code Changelog Connector ${{ steps.get_version.outputs.VERSION }}
+        
+        ### Installation
+        1. Download the `claude-code-changelog.tapestry` file below
+        2. Open Tapestry
+        3. Drag the file onto Tapestry or use File → Import Connector
+        
+        ### What's Changed
+        Check the [commit history](https://github.com/${{ github.repository }}/commits/${{ steps.get_version.outputs.VERSION }}) for details.
+        EOF
+        
         gh release create "${{ steps.get_version.outputs.VERSION }}" \
           --title "Release ${{ steps.get_version.outputs.VERSION }}" \
-          --notes "## Claude Code Changelog Connector ${{ steps.get_version.outputs.VERSION }}
-          
-### Installation
-1. Download the \`claude-code-changelog.tapestry\` file below
-2. Open Tapestry
-3. Drag the file onto Tapestry or use File → Import Connector
-
-### What's Changed
-Check the [commit history](https://github.com/${{ github.repository }}/commits/${{ steps.get_version.outputs.VERSION }}) for details." \
+          --notes-file release-notes.md \
           claude-code-changelog.tapestry
