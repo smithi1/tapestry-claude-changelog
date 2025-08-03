@@ -1,16 +1,60 @@
 // Claude Code Tapestry Connector
 // Parses the Claude Code changelog and creates timeline items
 
+// Constants
+const DAYS_BETWEEN_RELEASES = 2.5;
+const GITHUB_RELEASES_LIMIT = 30;
+const CHANGELOG_URL = "https://raw.githubusercontent.com/anthropics/claude-code/refs/heads/main/CHANGELOG.md";
+const GITHUB_API_BASE = "https://api.github.com/repos/anthropics/claude-code";
+
+// Verify function to validate connector configuration
+function verify() {
+    const testUrl = GITHUB_API_BASE;
+    return sendRequest(testUrl, "GET", null, { "Accept": "application/vnd.github.v3+json" })
+        .then((response) => {
+            try {
+                JSON.parse(response);
+                return true;
+            } catch (e) {
+                return false;
+            }
+        })
+        .catch(() => false);
+}
+
+// Handle actions from actions.json
+function performAction(actionId, item) {
+    switch(actionId) {
+        case "download":
+            // Extract version from item title or URI
+            const versionMatch = item.title.match(/Claude Code ([\d.]+)/);
+            if (versionMatch) {
+                const downloadUrl = `https://github.com/anthropics/claude-code/releases/tag/v${versionMatch[1]}`;
+                actionComplete(true, downloadUrl);
+            } else {
+                actionComplete(false, "Could not determine version");
+            }
+            break;
+        case "view_commits":
+            // Link to commits page for this version
+            const commitsUrl = "https://github.com/anthropics/claude-code/commits/main";
+            actionComplete(true, commitsUrl);
+            break;
+        default:
+            actionComplete(false, "Unknown action: " + actionId);
+    }
+}
+
 function load() {
-    const changelogUrl = "https://raw.githubusercontent.com/anthropics/claude-code/refs/heads/main/CHANGELOG.md";
+    // Use constant for changelog URL
 
     // Fetch the changelog
-    sendRequest(changelogUrl)
+    sendRequest(CHANGELOG_URL)
         .then((changelogText) => {
             const sections = extractVersionSections(changelogText);
 
-            // Check if we should use GitHub API
-            if (use_github_api === "on") {
+            // Check if we should use GitHub API (with proper variable check)
+            if (typeof use_github_api !== 'undefined' && use_github_api === "on") {
                 return enhanceWithGitHubDates(sections);
             } else {
                 return parseWithEstimatedDates(sections);
@@ -25,7 +69,7 @@ function load() {
 }
 
 function enhanceWithGitHubDates(sections) {
-    const releasesUrl = "https://api.github.com/repos/anthropics/claude-code/releases?per_page=30";
+    const releasesUrl = `${GITHUB_API_BASE}/releases?per_page=${GITHUB_RELEASES_LIMIT}`;
 
     return sendRequest(releasesUrl, "GET", null, { "Accept": "application/vnd.github.v3+json" })
         .then((releasesText) => {
@@ -82,12 +126,14 @@ function extractVersionSections(markdown) {
 
 function parseWithEstimatedDates(sections) {
     const results = [];
-    let estimatedDate = new Date();
+    // Start from a few days ago for the newest release (not today)
+    const today = new Date();
+    let estimatedDate = new Date(today.getTime() - (3 * 24 * 60 * 60 * 1000)); // Start 3 days ago
 
     sections.forEach((section, index) => {
-        // Average 2.5 days between releases with some variance
+        // Average days between releases with some variance
         const variance = (Math.random() - 0.5);
-        const daysToSubtract = 2.5 + variance;
+        const daysToSubtract = DAYS_BETWEEN_RELEASES + variance;
 
         if (index > 0) {
             estimatedDate = new Date(estimatedDate.getTime() - (daysToSubtract * 24 * 60 * 60 * 1000));
@@ -152,16 +198,16 @@ function estimateDateBetweenKnown(section, index, allSections, knownDates) {
         return new Date(beforeDate.getTime() + totalGap * position);
     } else if (beforeDate) {
         // Extrapolate from before date
-        const daysSince = (index - beforeIndex) * 2.5;
+        const daysSince = (index - beforeIndex) * DAYS_BETWEEN_RELEASES;
         return new Date(beforeDate.getTime() - daysSince * 24 * 60 * 60 * 1000);
     } else if (afterDate) {
         // Extrapolate from after date
-        const daysBefore = (afterIndex - index) * 2.5;
+        const daysBefore = (afterIndex - index) * DAYS_BETWEEN_RELEASES;
         return new Date(afterDate.getTime() + daysBefore * 24 * 60 * 60 * 1000);
     } else {
-        // No known dates, simple estimation
+        // No known dates, simple estimation starting from 3 days ago
         const today = new Date();
-        const daysAgo = index * 2.5;
+        const daysAgo = (index * DAYS_BETWEEN_RELEASES) + 3; // Add 3 days offset
         return new Date(today.getTime() - daysAgo * 24 * 60 * 60 * 1000);
     }
 }
