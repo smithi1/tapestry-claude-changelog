@@ -11,6 +11,9 @@ on:
         required: true
         type: string
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -46,33 +49,19 @@ jobs:
         echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
         echo "Building release for version: $VERSION"
     
-    - name: Create Release
-      id: create_release
-      uses: actions/create-release@v1
+    - name: Create Release with GitHub CLI
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        tag_name: ${{ steps.get_version.outputs.VERSION }}
-        release_name: Release ${{ steps.get_version.outputs.VERSION }}
-        body: |
-          ## Claude Code Changelog Connector ${{ steps.get_version.outputs.VERSION }}
+      run: |
+        gh release create "${{ steps.get_version.outputs.VERSION }}" \
+          --title "Release ${{ steps.get_version.outputs.VERSION }}" \
+          --notes "## Claude Code Changelog Connector ${{ steps.get_version.outputs.VERSION }}
           
-          ### Installation
-          1. Download the `claude-code-changelog.tapestry` file below
-          2. Open Tapestry
-          3. Drag the file onto Tapestry or use File → Import Connector
-          
-          ### What's Changed
-          See [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md) for details.
-        draft: false
-        prerelease: false
-    
-    - name: Upload Release Asset
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: ./claude-code-changelog.tapestry
-        asset_name: claude-code-changelog.tapestry
-        asset_content_type: application/zip
+### Installation
+1. Download the \`claude-code-changelog.tapestry\` file below
+2. Open Tapestry
+3. Drag the file onto Tapestry or use File → Import Connector
+
+### What's Changed
+Check the [commit history](https://github.com/${{ github.repository }}/commits/${{ steps.get_version.outputs.VERSION }}) for details." \
+          claude-code-changelog.tapestry
