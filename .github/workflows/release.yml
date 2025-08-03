@@ -1,0 +1,78 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., v1.0.0)'
+        required: true
+        type: string
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Create tapestry package
+      run: |
+        zip -r claude-code-changelog.tapestry \
+          plugin.js \
+          plugin-config.json \
+          ui-config.json \
+          actions.json
+    
+    - name: Verify package
+      run: |
+        echo "Package contents:"
+        unzip -l claude-code-changelog.tapestry
+        echo ""
+        echo "Verifying JavaScript syntax..."
+        node -c plugin.js
+    
+    - name: Get version
+      id: get_version
+      run: |
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          VERSION="${{ github.event.inputs.version }}"
+        else
+          VERSION=${GITHUB_REF#refs/tags/}
+        fi
+        echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+        echo "Building release for version: $VERSION"
+    
+    - name: Create Release
+      id: create_release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ steps.get_version.outputs.VERSION }}
+        release_name: Release ${{ steps.get_version.outputs.VERSION }}
+        body: |
+          ## Claude Code Changelog Connector ${{ steps.get_version.outputs.VERSION }}
+          
+          ### Installation
+          1. Download the `claude-code-changelog.tapestry` file below
+          2. Open Tapestry
+          3. Drag the file onto Tapestry or use File → Import Connector
+          
+          ### What's Changed
+          See [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md) for details.
+        draft: false
+        prerelease: false
+    
+    - name: Upload Release Asset
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./claude-code-changelog.tapestry
+        asset_name: claude-code-changelog.tapestry
+        asset_content_type: application/zip

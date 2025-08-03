@@ -1,0 +1,42 @@
+name: Build and Test
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Verify JavaScript syntax
+      run: node -c plugin.js
+    
+    - name: Validate JSON files
+      run: |
+        echo "Validating plugin-config.json..."
+        node -e "JSON.parse(require('fs').readFileSync('plugin-config.json', 'utf8'))"
+        echo "Validating ui-config.json..."
+        node -e "JSON.parse(require('fs').readFileSync('ui-config.json', 'utf8'))"
+        echo "Validating actions.json..."
+        node -e "JSON.parse(require('fs').readFileSync('actions.json', 'utf8'))"
+    
+    - name: Create test package
+      run: |
+        zip -r test.tapestry \
+          plugin.js \
+          plugin-config.json \
+          ui-config.json \
+          actions.json
+    
+    - name: Verify package contents
+      run: |
+        echo "Package created successfully:"
+        unzip -l test.tapestry
+        echo ""
+        echo "Package size: $(du -h test.tapestry | cut -f1)"

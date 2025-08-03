@@ -1,8 +1,11 @@
 # Claude Code Changelog - Tapestry Connector
 
-A [Tapestry](https://www.iconfactory.com/tapestry) connector that displays Claude Code version updates in your universal timeline.
+[![MIT License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Build](https://github.com/smithi1/tapestry-claude-changelog/actions/workflows/build.yml/badge.svg)](https://github.com/smithi1/tapestry-claude-changelog/actions)
+[![GitHub release](https://img.shields.io/github/release/smithi1/tapestry-claude-changelog.svg)](https://github.com/smithi1/tapestry-claude-changelog/releases)
+[![Maintenance](https://img.shields.io/badge/Maintained%3F-yes-green.svg)](https://github.com/smithi1/tapestry-claude-changelog/graphs/commit-activity)
 
-![Timeline View](screenshots/timeline-view.png)
+A [Tapestry](https://www.iconfactory.com/tapestry) connector that displays Claude Code version updates in your universal timeline.
 
 ## Features
 
@@ -15,18 +18,19 @@ A [Tapestry](https://www.iconfactory.com/tapestry) connector that displays Claud
 
 ## Installation
 
-### Method 1: Direct Download
+### Method 1: Direct Download (Recommended)
 
-1. Download the latest [`claude-code-changelog.tapestry`](releases/claude-code-changelog.tapestry) file
-2. Open Tapestry
-3. Drag the `.tapestry` file onto Tapestry, or use File → Import Connector
+1. Go to the [latest release](https://github.com/smithi1/tapestry-claude-changelog/releases/latest)
+2. Download `claude-code-changelog.tapestry`
+3. Open Tapestry
+4. Drag the `.tapestry` file onto Tapestry, or use File → Import Connector
 
 ### Method 2: Build from Source
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/claude-code-tapestry-connector.git
-cd claude-code-tapestry-connector/connector
-zip -r ../claude-code-changelog.tapestry .
+git clone https://github.com/smithi1/tapestry-claude-changelog.git
+cd claude-code-tapestry-connector
+zip -r claude-code-changelog.tapestry plugin.js plugin-config.json ui-config.json actions.json
 ```
 
 ## Configuration
@@ -58,13 +62,30 @@ Each timeline entry shows:
 
 ## Development
 
+### Quick Start
+
+```bash
+# Clone the repository
+git clone https://github.com/smithi1/tapestry-claude-changelog.git
+cd claude-code-tapestry-connector
+
+# Create a test build
+zip -r test.tapestry plugin.js plugin-config.json ui-config.json actions.json
+
+# Verify syntax
+node -c plugin.js
+
+# Import test.tapestry into Tapestry for testing
+```
+
 ### File Structure
 
 ```
-connector/
 ├── plugin-config.json    # Connector metadata and configuration
 ├── plugin.js            # Main parsing and transformation logic
-└── ui-config.json       # User interface settings
+├── ui-config.json       # User interface settings
+├── actions.json         # Custom timeline item actions
+└── CLAUDE.md           # AI assistant instructions
 ```
 
 ### Key Functions
@@ -76,10 +97,11 @@ connector/
 
 ### Testing
 
-1. Make your changes in the `connector/` directory
-2. Create a new `.tapestry` file: `zip -r test.tapestry connector/*`
-3. Import into Tapestry for testing
-4. Check the timeline and verify links work correctly
+1. Make your changes to the plugin files
+2. Run syntax validation: `node -c plugin.js`
+3. Create test package: `zip -r test.tapestry plugin.js plugin-config.json ui-config.json actions.json`
+4. Import into Tapestry for testing
+5. Verify timeline items appear correctly and links work
 
 ## Contributing
 
@@ -111,9 +133,8 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Support
 
-- 🐛 **Issues**: [GitHub Issues](https://github.com/YOUR_USERNAME/claude-code-tapestry-connector/issues)
-- 💬 **Discussions**: [GitHub Discussions](https://github.com/YOUR_USERNAME/claude-code-tapestry-connector/discussions)
-- 📧 **Contact**: your-email@example.com
+- 🐛 **Issues**: [GitHub Issues](https://github.com/smithi1/tapestry-claude-changelog/issues)
+- 💬 **Discussions**: [GitHub Discussions](https://github.com/smithi1/tapestry-claude-changelog/discussions)
 
 ---
 
