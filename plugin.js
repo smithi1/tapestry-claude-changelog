@@ -1,0 +1,368 @@
+// Claude Code Tapestry Connector
+// Parses the Claude Code changelog and creates timeline items
+
+function load() {
+    const changelogUrl = "https://raw.githubusercontent.com/anthropics/claude-code/refs/heads/main/CHANGELOG.md";
+
+    // Fetch the changelog
+    sendRequest(changelogUrl)
+        .then((changelogText) => {
+            const sections = extractVersionSections(changelogText);
+
+            // Check if we should use GitHub API
+            if (use_github_api === "on") {
+                return enhanceWithGitHubDates(sections);
+            } else {
+                return parseWithEstimatedDates(sections);
+            }
+        })
+        .then((results) => {
+            processResults(results);
+        })
+        .catch((requestError) => {
+            processError(requestError);
+        });
+}
+
+function enhanceWithGitHubDates(sections) {
+    const releasesUrl = "https://api.github.com/repos/anthropics/claude-code/releases?per_page=30";
+
+    return sendRequest(releasesUrl, "GET", null, { "Accept": "application/vnd.github.v3+json" })
+        .then((releasesText) => {
+            try {
+                const releases = JSON.parse(releasesText);
+                const releaseDates = {};
+
+                releases.forEach(release => {
+                    const version = release.tag_name.replace(/^v/, '');
+                    releaseDates[version] = new Date(release.published_at || release.created_at);
+                });
+
+                return parseWithMixedDates(sections, releaseDates);
+            } catch (e) {
+                // Fall back to estimation if API fails
+                return parseWithEstimatedDates(sections);
+            }
+        })
+        .catch(() => {
+            // API failed, use estimation
+            return parseWithEstimatedDates(sections);
+        });
+}
+
+function extractVersionSections(markdown) {
+    const sections = [];
+    const lines = markdown.split('\n');
+    let currentSection = null;
+
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        const versionMatch = line.match(/^##\s+([\d.]+(?:-[a-zA-Z0-9]+)?)\s*$/);
+
+        if (versionMatch) {
+            if (currentSection) {
+                sections.push(currentSection);
+            }
+            currentSection = {
+                version: versionMatch[1],
+                changes: [],
+                lineNumber: i
+            };
+        } else if (currentSection && line.trim().startsWith('-')) {
+            currentSection.changes.push(line.trim().substring(1).trim());
+        }
+    }
+
+    if (currentSection && currentSection.changes.length > 0) {
+        sections.push(currentSection);
+    }
+
+    return sections;
+}
+
+function parseWithEstimatedDates(sections) {
+    const results = [];
+    let estimatedDate = new Date();
+
+    sections.forEach((section, index) => {
+        // Average 2.5 days between releases with some variance
+        const variance = (Math.random() - 0.5);
+        const daysToSubtract = 2.5 + variance;
+
+        if (index > 0) {
+            estimatedDate = new Date(estimatedDate.getTime() - (daysToSubtract * 24 * 60 * 60 * 1000));
+        }
+
+        const item = createItem(section, new Date(estimatedDate));
+        if (item) results.push(item);
+    });
+
+    return results;
+}
+
+function parseWithMixedDates(sections, knownDates) {
+    const results = [];
+
+    sections.forEach((section, index) => {
+        let date;
+
+        if (knownDates[section.version]) {
+            date = knownDates[section.version];
+        } else {
+            // Estimate based on surrounding known dates
+            date = estimateDateBetweenKnown(section, index, sections, knownDates);
+        }
+
+        const item = createItem(section, date);
+        if (item) results.push(item);
+    });
+
+    return results;
+}
+
+function estimateDateBetweenKnown(section, index, allSections, knownDates) {
+    // Find nearest known dates
+    let beforeDate = null;
+    let afterDate = null;
+    let beforeIndex = -1;
+    let afterIndex = allSections.length;
+
+    // Look backwards for a known date
+    for (let i = index - 1; i >= 0; i--) {
+        if (knownDates[allSections[i].version]) {
+            beforeIndex = i;
+            beforeDate = knownDates[allSections[i].version];
+            break;
+        }
+    }
+
+    // Look forwards for a known date
+    for (let i = index + 1; i < allSections.length; i++) {
+        if (knownDates[allSections[i].version]) {
+            afterIndex = i;
+            afterDate = knownDates[allSections[i].version];
+            break;
+        }
+    }
+
+    if (beforeDate && afterDate) {
+        // Interpolate between known dates
+        const totalGap = afterDate.getTime() - beforeDate.getTime();
+        const position = (index - beforeIndex) / (afterIndex - beforeIndex);
+        return new Date(beforeDate.getTime() + totalGap * position);
+    } else if (beforeDate) {
+        // Extrapolate from before date
+        const daysSince = (index - beforeIndex) * 2.5;
+        return new Date(beforeDate.getTime() - daysSince * 24 * 60 * 60 * 1000);
+    } else if (afterDate) {
+        // Extrapolate from after date
+        const daysBefore = (afterIndex - index) * 2.5;
+        return new Date(afterDate.getTime() + daysBefore * 24 * 60 * 60 * 1000);
+    } else {
+        // No known dates, simple estimation
+        const today = new Date();
+        const daysAgo = index * 2.5;
+        return new Date(today.getTime() - daysAgo * 24 * 60 * 60 * 1000);
+    }
+}
+
+function createItem(section, date) {
+    // Create URI using GitHub's auto-generated header anchors
+    const anchorId = section.version.replace(/\./g, '');
+    const uri = `https://github.com/anthropics/claude-code/blob/main/CHANGELOG.md#${anchorId}`;
+
+    const item = Item.createWithUriDate(uri, date);
+
+    // Create title
+    const highlight = findHighlight(section.changes);
+    item.title = `Claude Code ${section.version}${highlight ? ' - ' + highlight : ''}`;
+
+    // Format the body
+    let bodyHtml = '';
+
+    // Group changes by type
+    const grouped = groupChanges(section.changes);
+
+    // Determine primary change type for preview
+    let previewText = `${section.version}`;
+    if (grouped.breaking.length > 0) {
+        previewText += ` ${getTypeEmoji('breaking')} ${getTypeLabel('breaking')}`;
+    } else if (grouped.features.length > 0) {
+        previewText += ` ${getTypeEmoji('features')} ${getTypeLabel('features')}`;
+    } else if (grouped.fixes.length > 0) {
+        previewText += ` ${getTypeEmoji('fixes')} ${getTypeLabel('fixes')}`;
+    } else if (grouped.improvements.length > 0) {
+        previewText += ` ${getTypeEmoji('improvements')} ${getTypeLabel('improvements')}`;
+    }
+
+    // Start with version + type for table preview
+    bodyHtml += `<p><strong>${previewText}</strong></p>`;
+
+    // Add all changes organized by type
+    ['breaking', 'features', 'fixes', 'improvements'].forEach(type => {
+        if (grouped[type].length > 0) {
+            bodyHtml += '<ul>';
+            grouped[type].forEach(change => {
+                bodyHtml += `<li>${formatChange(change)}</li>`;
+            });
+            bodyHtml += '</ul>';
+        }
+    });
+
+    item.body = bodyHtml;
+
+    // Add author identity
+    const identity = Identity.createWithName("Claude Code Team");
+    identity.uri = "https://github.com/anthropics/claude-code";
+    identity.avatar = "https://avatars.githubusercontent.com/u/76263028";
+    identity.username = "@anthropics";
+    item.author = identity;
+
+    // Add annotations for special releases
+    const annotations = [];
+    if (section.version === '1.0.0') {
+        annotations.push(createAnnotation("🎉 GA Release"));
+    } else if (hasBreakingChanges(section.changes)) {
+        annotations.push(createAnnotation("⚠️ Breaking Changes"));
+    } else if (section.version.endsWith('.0')) {
+        annotations.push(createAnnotation("✨ Feature Release"));
+    }
+
+    if (annotations.length > 0) {
+        item.annotations = annotations;
+    }
+
+    return item;
+}
+
+function findHighlight(changes) {
+    // Look for the most important change to highlight
+    for (const change of changes) {
+        const lower = change.toLowerCase();
+        if (lower.includes('introducing') || lower.includes('new model')) {
+            return extractFeatureName(change);
+        }
+    }
+
+    for (const change of changes) {
+        if (change.toLowerCase().includes('breaking change')) {
+            return 'Breaking Changes';
+        }
+    }
+
+    for (const change of changes) {
+        const lower = change.toLowerCase();
+        if (lower.includes('can now') || lower.includes('added support')) {
+            return extractFeatureName(change);
+        }
+    }
+
+    return null;
+}
+
+function extractFeatureName(change) {
+    // Try to extract a concise feature name
+    const patterns = [
+        /introducing\s+(.+?)(?:\s*[-–—]|$)/i,
+        /added\s+support\s+for\s+(.+?)(?:\s*[-–—]|$)/i,
+        /can\s+now\s+(.+?)(?:\s*[-–—]|$)/i,
+        /new\s+(.+?)(?:\s*[-–—]|$)/i
+    ];
+
+    for (const pattern of patterns) {
+        const match = change.match(pattern);
+        if (match) {
+            let feature = match[1].trim();
+            // Truncate if too long
+            if (feature.length > 30) {
+                feature = feature.substring(0, 27) + '...';
+            }
+            return feature;
+        }
+    }
+
+    // Fallback: use first few words
+    const words = change.split(' ').slice(0, 5).join(' ');
+    return words.length > 30 ? words.substring(0, 27) + '...' : words;
+}
+
+function groupChanges(changes) {
+    const groups = {
+        breaking: [],
+        features: [],
+        fixes: [],
+        improvements: []
+    };
+
+    changes.forEach(change => {
+        const lower = change.toLowerCase();
+        if (lower.includes('breaking change') || lower.startsWith('breaking:')) {
+            groups.breaking.push(change);
+        } else if (lower.includes('fixed') || lower.includes('fix ')) {
+            groups.fixes.push(change);
+        } else if (lower.includes('added') || lower.includes('new ') ||
+            lower.includes('introducing') || lower.includes('can now')) {
+            groups.features.push(change);
+        } else {
+            groups.improvements.push(change);
+        }
+    });
+
+    return groups;
+}
+
+function formatChange(change) {
+    // Escape HTML
+    let formatted = escapeHtml(change);
+
+    // Format code elements
+    formatted = formatted.replace(/`([^`]+)`/g, '<code>$1</code>');
+
+    // Bold important keywords
+    formatted = formatted.replace(/\b(Breaking change:|BREAKING:)/gi, '<strong>$1</strong>');
+
+    return formatted;
+}
+
+function hasBreakingChanges(changes) {
+    return changes.some(change =>
+        change.toLowerCase().includes('breaking change') ||
+        change.toLowerCase().startsWith('breaking:')
+    );
+}
+
+function createAnnotation(text) {
+    const annotation = Annotation.createWithText(text);
+    return annotation;
+}
+
+function getTypeEmoji(type) {
+    const emojis = {
+        breaking: '⚠️',
+        features: '✨',
+        fixes: '🐛',
+        improvements: '📈'
+    };
+    return emojis[type] || '•';
+}
+
+function getTypeLabel(type) {
+    const labels = {
+        breaking: 'Breaking Changes',
+        features: 'New Features',
+        fixes: 'Bug Fixes',
+        improvements: 'Improvements'
+    };
+    return labels[type] || 'Changes';
+}
+
+function escapeHtml(text) {
+    const map = {
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+    };
+    return text.replace(/[&<>"']/g, m => map[m]);
+}

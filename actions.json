@@ -1,0 +1,14 @@
+{
+  "items": [
+    {
+      "id": "download",
+      "name": "Download Update",
+      "icon": "arrow.down.circle.fill"
+    },
+    {
+      "id": "view_commits",
+      "name": "View Commits",
+      "icon": "list.bullet.rectangle"
+    }
+  ]
+}

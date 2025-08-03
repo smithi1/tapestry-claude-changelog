@@ -1,0 +1,11 @@
+{
+  "inputs": [
+    {
+      "name": "use_github_api",
+      "type": "switch",
+      "prompt": "Use GitHub API",
+      "value": "on",
+      "placeholder": "Fetch actual release dates from GitHub (uses 1 API request per check)"
+    }
+  ]
+}

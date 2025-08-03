@@ -1,0 +1,13 @@
+{
+  "id": "uk.craftscale.anthropic-cc-changelog-connector",
+  "display_name": "Claude Code Changelog",
+  "site": "https://raw.githubusercontent.com/anthropics/claude-code/refs/heads/main/CHANGELOG.md",
+  "icon": "https://avatars.githubusercontent.com/u/76263028",
+  "service_name": "Claude Code Changelog",
+  "default_color": "orange",
+  "item_style": "post",
+  "version": 1,
+  "provides_attachments": true,
+  "check_interval": 3600,
+  "minimum_app_version": "1.0"
+}
