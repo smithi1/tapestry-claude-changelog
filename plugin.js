@@ -407,13 +407,18 @@ function groupChanges(changes) {
 }
 
 function formatChange(change) {
-    // Escape HTML
+    // Validate input
+    if (!change || typeof change !== 'string') {
+        return '';
+    }
+    
+    // Escape HTML first for security
     let formatted = escapeHtml(change);
 
-    // Format code elements
-    formatted = formatted.replace(/`([^`]+)`/g, '<code>$1</code>');
+    // Format code elements (safe because HTML is already escaped)
+    formatted = formatted.replace(/&#x60;([^&#x60;]+)&#x60;/g, '<code>$1</code>');
 
-    // Bold important keywords
+    // Bold important keywords (safe because HTML is already escaped)
     formatted = formatted.replace(/\b(Breaking change:|BREAKING:)/gi, '<strong>$1</strong>');
 
     return formatted;
@@ -452,12 +457,19 @@ function getTypeLabel(type) {
 }
 
 function escapeHtml(text) {
+    // More comprehensive HTML escaping for security
+    if (!text) return '';
+    
     const map = {
         '&': '&amp;',
         '<': '&lt;',
         '>': '&gt;',
         '"': '&quot;',
-        "'": '&#39;'
+        "'": '&#39;',
+        '/': '&#x2F;',  // Forward slash for extra safety
+        '`': '&#x60;',  // Backtick
+        '=': '&#x3D;'   // Equals sign
     };
-    return text.replace(/[&<>"']/g, m => map[m]);
+    
+    return String(text).replace(/[&<>"'\/`=]/g, m => map[m]);
 }
