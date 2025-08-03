@@ -51,7 +51,20 @@ function load() {
     // Fetch the changelog
     sendRequest(CHANGELOG_URL)
         .then((changelogText) => {
+            // Validate response
+            if (!changelogText || typeof changelogText !== 'string') {
+                throw new Error("Invalid changelog response: empty or non-string data");
+            }
+            
+            if (changelogText.length < 100) {
+                throw new Error("Changelog appears to be too short or invalid");
+            }
+            
             const sections = extractVersionSections(changelogText);
+            
+            if (!sections || sections.length === 0) {
+                throw new Error("No version sections found in changelog");
+            }
 
             // Check if we should use GitHub API (with proper variable check)
             if (typeof use_github_api !== 'undefined' && use_github_api === "on") {
@@ -61,10 +74,17 @@ function load() {
             }
         })
         .then((results) => {
-            processResults(results);
+            if (!results || results.length === 0) {
+                processError("No changelog items could be created");
+            } else {
+                processResults(results);
+            }
         })
         .catch((requestError) => {
-            processError(requestError);
+            // Enhanced error logging
+            const errorMessage = requestError.message || requestError.toString() || "Unknown error occurred";
+            console.error("Claude Code Changelog Error:", errorMessage);
+            processError("Failed to load changelog: " + errorMessage);
         });
 }
 
@@ -74,27 +94,53 @@ function enhanceWithGitHubDates(sections) {
     return sendRequest(releasesUrl, "GET", null, { "Accept": "application/vnd.github.v3+json" })
         .then((releasesText) => {
             try {
+                // Validate response
+                if (!releasesText) {
+                    throw new Error("Empty GitHub API response");
+                }
+                
                 const releases = JSON.parse(releasesText);
+                
+                if (!Array.isArray(releases)) {
+                    throw new Error("GitHub API response is not an array");
+                }
+                
                 const releaseDates = {};
 
                 releases.forEach(release => {
-                    const version = release.tag_name.replace(/^v/, '');
-                    releaseDates[version] = new Date(release.published_at || release.created_at);
+                    if (release && release.tag_name) {
+                        const version = release.tag_name.replace(/^v/, '');
+                        const dateStr = release.published_at || release.created_at;
+                        if (dateStr) {
+                            const date = new Date(dateStr);
+                            if (!isNaN(date.getTime())) {
+                                releaseDates[version] = date;
+                            }
+                        }
+                    }
                 });
 
                 return parseWithMixedDates(sections, releaseDates);
             } catch (e) {
-                // Fall back to estimation if API fails
+                // Log the error but fall back gracefully
+                console.error("GitHub API error:", e.message);
                 return parseWithEstimatedDates(sections);
             }
         })
-        .catch(() => {
-            // API failed, use estimation
+        .catch((error) => {
+            // API failed, log and use estimation
+            console.error("GitHub API request failed:", error.message || error);
             return parseWithEstimatedDates(sections);
         });
 }
 
 function extractVersionSections(markdown) {
+    // Input validation
+    if (!markdown || typeof markdown !== 'string') {
+        console.error("Invalid markdown input to extractVersionSections");
+        return [];
+    }
+    
     const sections = [];
     const lines = markdown.split('\n');
     let currentSection = null;
@@ -104,7 +150,7 @@ function extractVersionSections(markdown) {
         const versionMatch = line.match(/^##\s+([\d.]+(?:-[a-zA-Z0-9]+)?)\s*$/);
 
         if (versionMatch) {
-            if (currentSection) {
+            if (currentSection && currentSection.changes.length > 0) {
                 sections.push(currentSection);
             }
             currentSection = {
@@ -113,7 +159,10 @@ function extractVersionSections(markdown) {
                 lineNumber: i
             };
         } else if (currentSection && line.trim().startsWith('-')) {
-            currentSection.changes.push(line.trim().substring(1).trim());
+            const change = line.trim().substring(1).trim();
+            if (change.length > 0) { // Only add non-empty changes
+                currentSection.changes.push(change);
+            }
         }
     }
 
