@@ -28,6 +28,9 @@ zip -r ../claude-code-changelog.tapestry .
 # Create a test build
 zip -r test.tapestry plugin.js plugin-config.json ui-config.json actions.json
 
+# Verify JavaScript syntax
+node -c plugin.js
+
 # Then import test.tapestry into Tapestry application for testing
 ```
 
